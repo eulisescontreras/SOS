@@ -1,0 +1,49 @@
+:root {
+  --red: #b00020;
+  --red-dark: #7a0016;
+  --bg: #f5f5f5;
+  --card: #ffffff;
+  --text: #1a1a1a;
+  --muted: #666666;
+  --ok: #1b7f3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #121212; --card: #1e1e1e; --text: #f0f0f0; --muted: #aaaaaa; }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh; padding: 16px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--text);
+  display: flex; justify-content: center; align-items: center;
+}
+[hidden] { display: none !important; }
+.card { width: 100%; max-width: 520px; background: var(--card); border-radius: 16px; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,.1); }
+h1 { margin-top: 0; font-size: 1.5rem; }
+h2 { font-size: 1.1rem; margin-top: 24px; }
+.muted { color: var(--muted); }
+.notes { white-space: pre-wrap; }
+label, .label { display: block; margin: 16px 0 6px; font-weight: 600; }
+input, textarea { width: 100%; margin-top: 6px; padding: 12px; font: inherit; border: 1px solid #bbb; border-radius: 10px; background: var(--card); color: var(--text); }
+.btn-primary { width: 100%; margin-top: 20px; padding: 14px; font-size: 1.1rem; font-weight: 700; color: #fff; background: var(--red); border: 0; border-radius: 10px; cursor: pointer; }
+.btn-primary:disabled { opacity: .6; }
+.btn-link { background: none; border: 0; color: var(--muted); text-decoration: underline; font: inherit; cursor: pointer; padding: 8px; margin-top: 8px; }
+.error { color: var(--red); font-weight: 600; }
+#file-list { list-style: none; padding: 0; }
+#file-list label { font-weight: 400; margin: 6px 0; display: flex; gap: 8px; align-items: center; }
+#file-list input { width: auto; margin: 0; }
+
+#main { text-align: center; width: 100%; max-width: 520px; }
+.hello { font-size: 1.2rem; }
+.sos {
+  width: min(75vw, 320px); aspect-ratio: 1; border-radius: 50%;
+  border: 8px solid var(--red-dark); background: var(--red); color: #fff;
+  font-size: clamp(3rem, 16vw, 5rem); font-weight: 900; letter-spacing: .05em;
+  box-shadow: 0 8px 30px rgba(176,0,32,.45); cursor: pointer;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.sos:active { transform: scale(.97); }
+.sos:disabled { opacity: .55; cursor: default; }
+.sos.sent { background: var(--ok); border-color: #0f5226; font-size: clamp(1.6rem, 8vw, 2.4rem); }
+.status { min-height: 3em; margin-top: 20px; font-size: 1.1rem; }
+.links { margin-top: 12px; }

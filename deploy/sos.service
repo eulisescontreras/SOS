@@ -1,0 +1,14 @@
+[Unit]
+Description=SOS button app (gunicorn)
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/sos-app
+EnvironmentFile=/opt/sos-app/.env
+ExecStart=/opt/sos-app/.venv/bin/gunicorn --workers 2 --bind 127.0.0.1:8000 app:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

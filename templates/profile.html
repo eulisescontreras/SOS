@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Información de {{ info.name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=1">
+</head>
+<body>
+  <section class="card">
+    <h1>{{ info.name }}</h1>
+    <p class="muted">Actualizado: {{ info.updated_at }} UTC</p>
+
+    <h2>Indicaciones</h2>
+    {% if info.notes %}
+      <p class="notes">{{ info.notes }}</p>
+    {% else %}
+      <p class="muted">Sin indicaciones.</p>
+    {% endif %}
+
+    <h2>Archivos</h2>
+    {% if files %}
+      <ul>
+        {% for f in files %}
+          <li><a href="{{ url_for('download_file', user_id=user_id, name=f, k=key) }}" target="_blank" rel="noopener">{{ f }}</a></li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Sin archivos.</p>
+    {% endif %}
+
+    <h2>Alertas recientes</h2>
+    {% if alerts %}
+      <ul>
+        {% for a in alerts %}
+          <li>
+            {{ a.time }} UTC —
+            {% if a.maps_url %}
+              <a href="{{ a.maps_url }}" target="_blank" rel="noopener">{{ a.lat }}, {{ a.lng }}</a>
+              {% if a.accuracy %}(±{{ a.accuracy|round|int }} m){% endif %}
+            {% else %}
+              ubicación no disponible{% if a.location_error %} ({{ a.location_error }}){% endif %}
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Sin alertas.</p>
+    {% endif %}
+  </section>
+</body>
+</html>

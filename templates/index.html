@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#b00020">
+  <title>SOS</title>
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+  <link rel="icon" href="{{ url_for('static', filename='icon-192.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=1">
+</head>
+<body>
+
+  <!-- First use / edit form -->
+  <section id="setup" class="card" hidden>
+    <h1 id="setup-title">Tus datos de emergencia</h1>
+    <p class="muted" id="setup-help">Se llena una sola vez. Se enviarán junto con tu alerta SOS.</p>
+    <form id="setup-form">
+      <label>Nombre completo *
+        <input name="name" id="f-name" required maxlength="120" autocomplete="name">
+      </label>
+      <label>Indicaciones (condición médica, contactos, qué hacer...)
+        <textarea name="notes" id="f-notes" rows="6" maxlength="5000"></textarea>
+      </label>
+      <div id="current-files" hidden>
+        <p class="label">Archivos guardados (marca para borrar)</p>
+        <ul id="file-list"></ul>
+      </div>
+      <label>Subir archivos (opcional)
+        <input type="file" name="files" id="f-files" multiple>
+      </label>
+      <p id="setup-error" class="error" hidden></p>
+      <button type="submit" class="btn-primary" id="setup-submit">Guardar</button>
+      <button type="button" class="btn-link" id="setup-cancel" hidden>Cancelar</button>
+    </form>
+  </section>
+
+  <!-- SOS screen -->
+  <section id="main" hidden>
+    <p class="hello">Hola, <strong id="who"></strong></p>
+    <button id="sos-btn" class="sos" type="button">SOS</button>
+    <p id="status" class="status" role="status" aria-live="assertive">Toca el botón para enviar una alerta con tu ubicación.</p>
+    <nav class="links">
+      <button type="button" class="btn-link" id="edit-btn">Editar mis datos</button>
+    </nav>
+  </section>
+
+  <script src="{{ url_for('static', filename='app.js') }}?v=2"></script>
+</body>
+</html>
