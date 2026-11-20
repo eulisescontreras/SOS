@@ -277,3 +277,28 @@ def test_recuperar_no_busca_por_trozos(client):
     for trozo in ["perez", "ana", "Ana P"]:
         assert client.post("/api/recuperar", json={"name": trozo}).status_code == 404, trozo
 
+
+def test_recuperar_deja_constancia_de_quien_fue_recuperado(client, tmp_path):
+    """20-nov-2026 · cada recuperación con éxito se anota en data/recuperaciones.log (nombre, id, IP) para el aviso."""
+    creado = register(client, name="Ana Pérez").get_json()
+    r = client.post("/api/recuperar", json={"name": "Ana Pérez"}, headers={"X-Real-IP": "203.0.113.7"})
+    assert r.status_code == 200
+    lineas = (tmp_path / "recuperaciones.log").read_text(encoding="utf-8").splitlines()
+    assert len(lineas) == 1
+    reg = json.loads(lineas[0])
+    assert reg["name"] == "Ana Pérez" and reg["user_id"] == creado["user_id"] and reg["ip"] == "203.0.113.7"
+    assert "edit_key" not in reg                    # la clave nunca se escribe en el registro
+
+
+def test_recuperar_fallida_no_anota_nada(client, tmp_path):
+    register(client, name="Ana Pérez")
+    assert client.post("/api/recuperar", json={"name": "Juan Otro"}).status_code == 404
+    assert not (tmp_path / "recuperaciones.log").exists()
+
+
+def test_recuperar_funciona_aunque_no_se_pueda_anotar(client, tmp_path, monkeypatch):
+    """Si escribir el registro falla, la persona recupera su ficha igual (el aviso nunca bloquea)."""
+    creado = register(client, name="Ana Pérez").get_json()
+    (tmp_path / "recuperaciones.log").mkdir()       # un directorio en su lugar: open() falla
+    r = client.post("/api/recuperar", json={"name": "Ana Pérez"})
+    assert r.status_code == 200 and r.get_json()["edit_key"] == creado["edit_key"]

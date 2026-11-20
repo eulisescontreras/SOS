@@ -208,6 +208,15 @@ def recuperar():
     if len(encontrados) > 1:
         return jsonify(error="Hay varias personas con ese nombre"), 409
     user_id, info = encontrados[0]
+    # 20-nov-2026 (seguridad): deja constancia de QUIÉN fue recuperado (el vigilante del servidor avisa por Telegram).
+    # Nunca puede romper la recuperación: cualquier fallo al escribir se ignora.
+    try:
+        with open(Path(config.DATA_DIR) / "recuperaciones.log", "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"time": now_iso(), "user_id": user_id, "name": info.get("name", ""),
+                                 "ip": request.headers.get("X-Real-IP") or request.remote_addr},
+                                ensure_ascii=False) + "\n")
+    except Exception:
+        app.logger.exception("no se pudo registrar la recuperación")
     return jsonify(edit_key=info["edit_key"], **public_profile(user_id, info))
 
 
