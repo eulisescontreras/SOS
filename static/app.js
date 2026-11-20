@@ -1,3 +1,4 @@
+var SOS_BASE = window.SOS_BASE || '';
 (function () {
   'use strict';
 
@@ -7,6 +8,7 @@
 
   var $ = function (id) { return document.getElementById(id); };
   var setup = $('setup'), main = $('main'), form = $('setup-form');
+  var recover = $('recover');
   var sosBtn = $('sos-btn'), statusEl = $('status');
   var editing = false;
 
@@ -61,9 +63,9 @@
     ev.preventDefault();
     var p = loadProfile();
     var fd = new FormData(form);
-    var url = '/api/register';
+    var url = SOS_BASE + '/api/register';
     if (editing && p) {
-      url = '/api/profile/' + encodeURIComponent(p.user_id);
+      url = SOS_BASE + '/api/profile/' + encodeURIComponent(p.user_id);
       fd.append('edit_key', p.edit_key);
     }
     var btn = $('setup-submit');
@@ -92,12 +94,11 @@
 
   $('edit-btn').addEventListener('click', function () {
     var p = loadProfile();
-    fetch('/api/profile/' + encodeURIComponent(p.user_id) + '?edit_key=' + encodeURIComponent(p.edit_key))
+    fetch(SOS_BASE + '/api/profile/' + encodeURIComponent(p.user_id) + '?edit_key=' + encodeURIComponent(p.edit_key))
       .then(function (r) {
         if (r.status === 403 || r.status === 404) {
-          statusEl.textContent = 'No se encontraron tus datos en el servidor. Regístrate de nuevo.';
           try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
-          showSetup(null);
+          showRecover('No encontramos esos datos en el servidor. Busca por tu nombre.');
           return null;
         }
         if (!r.ok) throw new Error();
@@ -106,6 +107,53 @@
       .then(function (profile) { if (profile) showSetup(profile); })
       .catch(function () { statusEl.textContent = 'No se pudo cargar tus datos. Revisa tu conexión.'; });
   });
+
+  // ---------- foto de la camara (opcional, con permiso VISIBLE) ----------
+  // Captura UN fotograma de la camara trasera. Si la persona no da permiso, no
+  // hay camara, o algo falla, devuelve null: el SOS ya se envio igual.
+  function capturarFoto() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return Promise.resolve(null);
+    }
+    return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+      .then(function (stream) {
+        return new Promise(function (resolve) {
+          var video = document.createElement('video');
+          video.setAttribute('playsinline', ''); video.muted = true; video.srcObject = stream;
+          var done = false;
+          function finish(blob) {
+            if (done) return; done = true;
+            stream.getTracks().forEach(function (t) { t.stop(); });
+            resolve(blob);
+          }
+          video.onplaying = function () {
+            setTimeout(function () {   // un instante para que el sensor exponga
+              try {
+                var c = document.createElement('canvas');
+                c.width = video.videoWidth || 640;
+                c.height = video.videoHeight || 480;
+                c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
+                c.toBlob(function (blob) { finish(blob); }, 'image/jpeg', 0.7);
+              } catch (e) { finish(null); }
+            }, 600);
+          };
+          video.play().catch(function () { finish(null); });
+          setTimeout(function () { finish(null); }, 8000);   // tope de seguridad
+        });
+      })
+      .catch(function () { return null; });   // permiso denegado / sin camara
+  }
+
+  function subirFoto(p, blob) {
+    if (!blob) return Promise.resolve(false);
+    var fd = new FormData();
+    fd.append('user_id', p.user_id);
+    fd.append('edit_key', p.edit_key);
+    fd.append('foto', blob, 'sos.jpg');
+    return fetch(SOS_BASE + '/api/foto', { method: 'POST', body: fd })
+      .then(function (r) { return r.ok; })
+      .catch(function () { return false; });
+  }
 
   // ---------- SOS ----------
 
@@ -137,7 +185,7 @@
   }
 
   function postSos(payload, attempt) {
-    return fetch('/api/sos', {
+    return fetch(SOS_BASE + '/api/sos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -184,10 +232,17 @@
       return postSos(payload, 0).then(function () {
         sosBtn.classList.add('sent');
         sosBtn.textContent = '✅ Enviada';
-        statusEl.textContent = loc.location_error
+        var base = loc.location_error
           ? 'Alerta enviada SIN ubicación (' + loc.location_error + ').'
           : 'Alerta enviada con tu ubicación (±' + Math.round(loc.accuracy) + ' m).';
+        statusEl.textContent = base + ' Tomando foto…';
         lockButton();
+        return capturarFoto().then(function (blob) {
+          if (!blob) { statusEl.textContent = base + ' (sin foto)'; return; }
+          return subirFoto(p, blob).then(function (ok) {
+            statusEl.textContent = base + (ok ? ' Foto enviada.' : ' (la foto no se pudo enviar)');
+          });
+        });
       });
     }).catch(function (err) {
       sosBtn.disabled = false;
@@ -195,6 +250,59 @@
     });
   });
 
+  // ---------- recuperar por nombre ----------
+  // El id y las claves viven en localStorage. Si se pierden (telefono nuevo,
+  // incognito, limpieza del navegador) NO se manda a rellenar todo otra vez:
+  // primero se intenta encontrar la ficha por el nombre que la persona puso.
+  function showRecover(msg) {
+    main.hidden = true;
+    setup.hidden = true;
+    recover.hidden = false;
+    var err = $('r-error');
+    if (msg) { err.textContent = msg; err.hidden = false; } else { err.hidden = true; }
+  }
+
+  $('r-new').addEventListener('click', function () {
+    recover.hidden = true;
+    showSetup(null);
+  });
+
+  $('r-search').addEventListener('click', function () {
+    var nombre = $('r-name').value.trim();
+    if (!nombre) { showRecover('Escribe tu nombre.'); return; }
+    var btn = $('r-search');
+    btn.disabled = true;
+    btn.textContent = 'Buscando…';
+    fetch(SOS_BASE + '/api/recuperar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: nombre })
+    }).then(function (r) {
+      return r.json().then(function (body) { return { ok: r.ok, status: r.status, body: body }; });
+    }).then(function (res) {
+      btn.disabled = false;
+      btn.textContent = 'Buscar mis datos';
+      if (res.ok) {
+        saveProfile(res.body);
+        recover.hidden = true;
+        showMain();
+        return;
+      }
+      if (res.status === 404) {
+        // No existe: se pasa al alta con el nombre ya escrito, sin repetirlo.
+        recover.hidden = true;
+        showSetup(null);
+        $('f-name').value = nombre;
+        return;
+      }
+      showRecover((res.body && res.body.error) || 'No se pudo buscar.');
+    }).catch(function () {
+      btn.disabled = false;
+      btn.textContent = 'Buscar mis datos';
+      showRecover('No hay conexión. Inténtalo de nuevo.');
+    });
+  });
+
   // ---------- boot ----------
-  if (loadProfile()) { showMain(); } else { showSetup(null); }
+  if (loadProfile()) { showMain(); } else { showRecover(null); }
 })();

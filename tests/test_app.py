@@ -153,3 +153,127 @@ def test_sos_delivery_failure_returns_502_but_keeps_alert(client, tmp_path, monk
     r = client.post("/api/sos", json={"user_id": body["user_id"], "edit_key": body["edit_key"], "lat": 1, "lng": 2})
     assert r.status_code == 502 and "error" in r.get_json()
     assert (tmp_path / "users" / body["user_id"] / "alerts.jsonl").is_file()
+
+
+# ---------- foto del SOS ----------
+
+def test_foto_se_guarda_y_notifica(client, tmp_path):
+    body = register(client).get_json()
+    uid, key = body["user_id"], body["edit_key"]
+    r = client.post("/api/foto", data={"user_id": uid, "edit_key": key,
+                    "foto": (io.BytesIO(b"\xff\xd8\xff\xee jpeg"), "sos.jpg", "image/jpeg")},
+                    content_type="multipart/form-data")
+    assert r.status_code == 200
+    out = r.get_json()
+    assert out["ok"] is True and out["email"] is True
+    fotos = list((tmp_path / "users" / uid / "sos_fotos").iterdir())
+    assert len(fotos) == 1 and fotos[0].suffix == ".jpg"
+    outbox = json.loads((tmp_path / "outbox.log").read_text(encoding="utf-8").splitlines()[-1])
+    assert "Foto del SOS de Ana Pérez" in outbox["subject"]
+    assert out["photo_url"] in outbox["body"]
+
+
+def test_foto_rechaza_clave_mala_y_no_imagen(client, tmp_path):
+    body = register(client).get_json()
+    uid = body["user_id"]
+    mala = client.post("/api/foto", data={"user_id": uid, "edit_key": "x",
+                       "foto": (io.BytesIO(b"x"), "sos.jpg", "image/jpeg")},
+                       content_type="multipart/form-data")
+    assert mala.status_code == 403
+    noimg = client.post("/api/foto", data={"user_id": uid, "edit_key": body["edit_key"],
+                        "foto": (io.BytesIO(b"PK\x03\x04"), "x.zip", "application/zip")},
+                        content_type="multipart/form-data")
+    assert noimg.status_code == 400
+    assert not (tmp_path / "users" / uid / "sos_fotos").exists()
+
+
+def test_foto_se_descarga_solo_con_view_key(client, tmp_path):
+    body = register(client).get_json()
+    uid, key = body["user_id"], body["edit_key"]
+    out = client.post("/api/foto", data={"user_id": uid, "edit_key": key,
+                      "foto": (io.BytesIO(b"\xff\xd8\xff datos"), "sos.jpg", "image/jpeg")},
+                      content_type="multipart/form-data").get_json()
+    ruta = out["photo_url"].split("https://sos.test")[1]
+    assert client.get(ruta).data == b"\xff\xd8\xff datos"
+    sin_k = ruta.split("?")[0]
+    assert client.get(sin_k).status_code == 404
+    assert client.get(sin_k + "?k=wrong").status_code == 404
+    # la edit_key NO abre la foto (solo la view_key del enlace)
+    assert client.get(sin_k + "?k=" + key).status_code == 404
+
+
+def test_foto_delivery_falla_pero_la_guarda(client, tmp_path, monkeypatch):
+    body = register(client).get_json()
+    monkeypatch.setattr(app_module.notifier, "send_photo", lambda *a: (_ for _ in ()).throw(RuntimeError("down")))
+    r = client.post("/api/foto", data={"user_id": body["user_id"], "edit_key": body["edit_key"],
+                    "foto": (io.BytesIO(b"\xff\xd8\xff"), "sos.jpg", "image/jpeg")},
+                    content_type="multipart/form-data")
+    assert r.status_code == 200 and r.get_json()["email"] is False
+    assert list((tmp_path / "users" / body["user_id"] / "sos_fotos").iterdir())
+
+
+# ---------- recuperar por nombre (el telefono perdio el localStorage) ----------
+
+def test_recuperar_devuelve_la_ficha_con_su_clave(client):
+    creado = register(client, name="Ana Pérez").get_json()
+    r = client.post("/api/recuperar", json={"name": "Ana Pérez"})
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["user_id"] == creado["user_id"]
+    assert body["edit_key"] == creado["edit_key"]
+    assert body["name"] == "Ana Pérez"
+    assert body["profile_url"] == creado["profile_url"]
+
+
+def test_recuperar_ignora_mayusculas_y_espacios_de_mas(client):
+    creado = register(client, name="Ana Pérez").get_json()
+    r = client.post("/api/recuperar", json={"name": "  ana   PÉREZ "})
+    assert r.status_code == 200
+    assert r.get_json()["user_id"] == creado["user_id"]
+
+
+def test_recuperar_sin_coincidencia_da_404(client):
+    register(client, name="Ana Pérez")
+    r = client.post("/api/recuperar", json={"name": "Juan Otro"})
+    assert r.status_code == 404
+
+
+def test_recuperar_con_nombre_vacio_da_400(client):
+    r = client.post("/api/recuperar", json={"name": "   "})
+    assert r.status_code == 400
+
+
+def test_recuperar_con_homonimos_no_entrega_ninguna_ficha(client):
+    a = register(client, name="Ana Pérez").get_json()
+    b = register(client, name="Ana Pérez").get_json()
+    assert a["user_id"] != b["user_id"]
+    r = client.post("/api/recuperar", json={"name": "Ana Pérez"})
+    assert r.status_code == 409
+    assert "edit_key" not in r.get_json()
+
+
+def test_recuperado_puede_mandar_sos(client):
+    register(client, name="Ana Pérez")
+    p = client.post("/api/recuperar", json={"name": "Ana Pérez"}).get_json()
+    r = client.post("/api/sos", json={
+        "user_id": p["user_id"], "edit_key": p["edit_key"],
+        "lat": 10.5, "lng": -66.9, "accuracy": 10,
+    })
+    assert r.status_code == 200
+    assert r.get_json()["ok"] is True
+
+
+def test_recuperar_ignora_tildes_y_signos(client):
+    creado = register(client, name="Ana Pérez").get_json()
+    for escrito in ["ana perez", "ANA PEREZ", "  Ana   Pérez  ", "Ana, Perez", "ána pérez"]:
+        r = client.post("/api/recuperar", json={"name": escrito})
+        assert r.status_code == 200, escrito
+        assert r.get_json()["user_id"] == creado["user_id"], escrito
+
+
+def test_recuperar_no_busca_por_trozos(client):
+    """Un apellido suelto NO puede devolver la ficha: seria la de otra persona."""
+    register(client, name="Ana Pérez")
+    for trozo in ["perez", "ana", "Ana P"]:
+        assert client.post("/api/recuperar", json={"name": trozo}).status_code == 404, trozo
+

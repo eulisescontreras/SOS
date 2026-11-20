@@ -12,6 +12,21 @@
 </head>
 <body>
 
+  <!-- Si el telefono no tiene los datos guardados: buscarse por nombre antes
+       de obligar a rellenar el formulario otra vez. -->
+  <section id="recover" class="card" hidden>
+    <h1>¿Ya te registraste?</h1>
+    <p class="muted">Este teléfono no tiene tus datos guardados. Escribe tu nombre y los buscamos.</p>
+    <label>Nombre completo
+      <input id="r-name" maxlength="120" autocomplete="name">
+    </label>
+    <p id="r-error" class="error" hidden></p>
+    <button type="button" id="r-search">Buscar mis datos</button>
+    <nav class="links">
+      <button type="button" class="btn-link" id="r-new">Es mi primera vez, registrarme</button>
+    </nav>
+  </section>
+
   <!-- First use / edit form -->
   <section id="setup" class="card" hidden>
     <h1 id="setup-title">Tus datos de emergencia</h1>
@@ -46,6 +61,9 @@
     </nav>
   </section>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=2"></script>
+  <!-- La app puede vivir bajo un prefijo (ej. /sos): el JS arma sus llamadas con
+       esta base en vez de asumir la raiz del dominio. -->
+  <script>window.SOS_BASE = {{ request.script_root|tojson }};</script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=5"></script>
 </body>
 </html>
